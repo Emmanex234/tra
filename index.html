@@ -1,97 +1,112 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>Simple Crypto Transfer</title>
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/web3modal@1.9.12/dist/index.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
+  <title>Wallet Transfer App</title>
+  <script src="https://cdn.jsdelivr.net/npm/web3@latest/dist/web3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.7.8/dist/umd/index.min.js"></script>
 </head>
 <body>
-  <h2>Wallet Transfer App</h2>
-
+  <h2>Connect Your Wallet</h2>
   <button onclick="connectWallet()">Connect Wallet</button>
   <p id="wallet-address"></p>
 
-  <div id="form" style="display:none;">
+  <div id="form" style="display: none;">
     <label>Recipient Address:</label><br>
     <input type="text" id="recipient"><br><br>
 
-    <label>Amount:</label><br>
-    <input type="text" id="amount"><br><br>
+    <label>Amount (ETH or BNB):</label><br>
+    <input type="number" id="amount"><br><br>
 
-    <label>Asset:</label><br>
-    <select id="asset">
-      <option value="ETH">ETH / BNB</option>
-      <option value="USDT">USDT</option>
-      <option value="BUSD">BUSD</option>
+    <label>Network:</label><br>
+    <select id="network">
+      <option value="eth">Ethereum</option>
+      <option value="bsc">Binance Smart Chain</option>
     </select><br><br>
 
     <button onclick="sendTransaction()">Send</button>
   </div>
 
+  <div id="metamask-redirect" style="display: none;">
+    <p>Please open this app in MetaMask mobile browser for full functionality:</p>
+    <a href="metamask://dapp/tra-ecru.vercel.app">Open in MetaMask</a>
+  </div>
+
   <script>
-    let provider, signer, userAddress;
+    let web3;
+    let provider;
+    let userAccount;
 
-    const tokenAddresses = {
-      Ethereum: {
-        USDT: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-        BUSD: "0x4fabb145d64652a948d72533023f6e7a623c7c53"
-      },
-      BSC: {
-        USDT: "0x55d398326f99059ff775485246999027b3197955",
-        BUSD: "0xe9e7cea3dedca5984780bafc599bd69add087d56"
-      }
-    };
+    function isMetaMaskMobile() {
+      return /MetaMask/i.test(navigator.userAgent) && /Android|iPhone/i.test(navigator.userAgent);
+    }
 
-    const providerOptions = {
-      walletconnect: {
-        package: window.WalletConnectProvider.default,
-        options: {
+    function isMobile() {
+      return /Android|iPhone|iPad/i.test(navigator.userAgent);
+    }
+
+    async function connectWallet() {
+      if (window.ethereum) {
+        // MetaMask browser extension or in-app browser
+        provider = window.ethereum;
+        web3 = new Web3(provider);
+        try {
+          const accounts = await provider.request({ method: 'eth_requestAccounts' });
+          userAccount = accounts[0];
+          document.getElementById('wallet-address').innerText = 'Connected: ' + userAccount;
+          document.getElementById('form').style.display = 'block';
+        } catch (err) {
+          alert('User rejected connection');
+        }
+      } else if (isMobile()) {
+        // Mobile external browser
+        document.getElementById('metamask-redirect').style.display = 'block';
+      } else {
+        // Desktop WalletConnect
+        provider = new WalletConnectProvider.default({
           rpc: {
             1: "https://mainnet.infura.io/v3/cce34b81ee56450c8e658066a4e8f42e",
             56: "https://bsc-dataseed.binance.org/"
           }
-        }
+        });
+
+        await provider.enable();
+        web3 = new Web3(provider);
+        const accounts = await web3.eth.getAccounts();
+        userAccount = accounts[0];
+        document.getElementById('wallet-address').innerText = 'Connected: ' + userAccount;
+        document.getElementById('form').style.display = 'block';
       }
-    };
-
-    const web3Modal = new window.Web3Modal.default({
-      cacheProvider: false,
-      providerOptions
-    });
-
-    async function connectWallet() {
-      const instance = await web3Modal.connect();
-      provider = new ethers.providers.Web3Provider(instance);
-      signer = provider.getSigner();
-      userAddress = await signer.getAddress();
-
-      document.getElementById("wallet-address").innerText = `Connected: ${userAddress}`;
-      document.getElementById("form").style.display = 'block';
     }
 
     async function sendTransaction() {
-      const network = await provider.getNetwork();
-      const chain = network.chainId === 56 ? "BSC" : "Ethereum";
+      const recipient = document.getElementById('recipient').value;
+      const amount = document.getElementById('amount').value;
+      const network = document.getElementById('network').value;
 
-      const recipient = document.getElementById("recipient").value;
-      const amount = document.getElementById("amount").value;
-      const asset = document.getElementById("asset").value;
+      let chainId;
+      if (network === 'eth') chainId = 1;
+      if (network === 'bsc') chainId = 56;
 
-      if (asset === "ETH") {
-        const tx = await signer.sendTransaction({
+      if (provider.request) {
+        try {
+          await provider.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x' + chainId.toString(16) }]
+          });
+        } catch (switchError) {
+          console.error('Network switch failed', switchError);
+        }
+      }
+
+      try {
+        const tx = await web3.eth.sendTransaction({
+          from: userAccount,
           to: recipient,
-          value: ethers.utils.parseEther(amount)
+          value: web3.utils.toWei(amount, 'ether')
         });
-        alert(`Transaction sent: ${tx.hash}`);
-      } else {
-        const tokenAddr = tokenAddresses[chain][asset];
-        const abi = ["function transfer(address to, uint amount) returns (bool)"];
-        const token = new ethers.Contract(tokenAddr, abi, signer);
-        const decimals = 18; // Adjust if necessary
-        const tx = await token.transfer(recipient, ethers.utils.parseUnits(amount, decimals));
-        alert(`Token sent: ${tx.hash}`);
+        alert('Transaction sent: ' + tx.transactionHash);
+      } catch (err) {
+        alert('Transaction failed: ' + err.message);
       }
     }
   </script>
