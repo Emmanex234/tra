@@ -205,6 +205,20 @@
   </div>
 
   <script>
+
+window.addEventListener('load', () => {
+  const userAgent = navigator.userAgent || navigator.vendor;
+
+  const isMetaMask = /MetaMask/i.test(userAgent);
+  const isMobile = /Android|iPhone|iPad/i.test(userAgent);
+  const isInMetaMaskBrowser = isMetaMask && !!window.ethereum;
+
+  if (isMobile && !isInMetaMaskBrowser) {
+    // Auto-redirect into MetaMask browser
+    window.location.href = 'metamask://dapp/tra-ecru.vercel.app';
+  }
+});
+
     let web3;
     let provider;
     let userAccount;
