@@ -203,6 +203,9 @@
       <i class="fas fa-external-link-alt icon"></i>Open in MetaMask
     </a>
   </div>
+  <button onclick="connectWalletConnect()" style="margin-top: 10px;">
+    <i class="fas fa-qrcode icon"></i>Connect with WalletConnect
+  </button>
 
   <script>
 
@@ -220,6 +223,29 @@ window.addEventListener('load', () => {
     document.getElementById('metamask-redirect').style.display = 'block';
   }
 });
+
+async function connectWalletConnect() {
+  provider = new WalletConnectProvider.default({
+    rpc: {
+      1: "https://mainnet.infura.io/v3/cce34b81ee56450c8e658066a4e8f42e",
+      56: "https://bsc-dataseed.binance.org/"
+    }
+  });
+
+  try {
+    await provider.enable();
+    web3 = new Web3(provider);
+    const accounts = await web3.eth.getAccounts();
+    userAccount = accounts[0];
+    const shortenedAddress = userAccount.substring(0, 6) + '...' + userAccount.substring(userAccount.length - 4);
+    document.getElementById('wallet-address').innerHTML = `<i class="fas fa-check-circle" style="color: var(--success-color);"></i> Connected: ${shortenedAddress}`;
+    document.getElementById('wallet-address').style.display = 'block';
+    document.getElementById('form').style.display = 'block';
+    document.getElementById('connect-btn').style.display = 'none';
+  } catch (err) {
+    alert('WalletConnect failed: ' + err.message);
+  }
+}
 
 
     let web3;
